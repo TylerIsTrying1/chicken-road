@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Chicken Road Gambling Game</title>
+<style>
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(to bottom, #a2d5f2, #ffffff);
+    margin: 0;
+    padding: 20px;
+    text-align: center;
+    user-select: none;
+  }
+
+  h1 {
+    margin-bottom: 0.1em;
+  }
+
+  #money {
+    font-size: 24px;
+    margin-bottom: 10px;
+  }
+
+  #bet-section {
+    margin: 20px auto;
+    max-width: 400px;
+  }
+
+  label {
+    font-weight: bold;
+    margin-right: 8px;
+  }
+
+  input[type="number"] {
+    width: 80px;
+    padding: 6px;
+    font-size: 18px;
+  }
+
+  button {
+    font-size: 18px;
+    padding: 8px 15px;
+    margin-left: 10px;
+    cursor: pointer;
+    border-radius: 5px;
+    border: none;
+    background-color: #4CAF50;
+    color: white;
+    transition: background-color 0.3s ease;
+  }
+
+  button:hover:not(:disabled) {
+    background-color: #45a049;
+  }
+
+  button:disabled {
+    background-color: grey;
+    cursor: not-allowed;
+  }
+
+  #road {
+    position: relative;
+    width: 600px;
+    height: 200px;
+    margin: 40px auto;
+    background: repeating-linear-gradient(
+      to right,
+      #555,
+      #555 20px,
+      #444 20px,
+      #444 40px
+    );
+    border-radius: 20px;
+    box-shadow: inset 0 0 15px #333;
+  }
+
+  .lane {
+    position: absolute;
+    width: 100%;
+    height: 40px;
+    background: #666;
+    left: 0;
+    border-top: 2px solid #ccc;
+    border-bottom: 2px solid #ccc;
+  }
+
+  .lane:nth-child(1) { top: 40px; }
+  .lane:nth-child(2) { top: 100px; }
+  .lane:nth-child(3) { top: 160px; }
+
+  .chicken {
+    position: absolute;
+    width: 40px;
+    height: 40px;
+    background-image: url('https://i.imgur.com/rV5pq2D.png'); /* small chicken icon */
+    background-size: cover;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    filter: drop-shadow(1px 1px 1px #333);
+    transform-origin: center center;
+    transition: transform 0.2s ease;
+  }
+
+  .dead {
+    filter: grayscale(100%) brightness(0.6);
+    transform: rotate(90deg);
+  }
+
+  #message {
+    font-size: 22px;
+    margin-top: 15px;
+    min-height: 28px;
+    color: #333;
+    font-weight: 600;
+  }
+</style>
+</head>
+<body>
+
+<h1>Chicken Road Gambling Game</h1>
+<div id="money">Money: $1000</div>
+
+<div id="bet-section">
+  <label for="betAmount">Bet Amount ($):</label>
+  <input type="number" id="betAmount" min="1" value="100" />
+  <button id="betButton">Place Bet & Start</button>
+</div>
+
+<div id="road">
+  <!-- Three lanes for chickens -->
+  <div class="lane"></div>
+  <div class="lane"></div>
+  <div class="lane"></div>
+</div>
+
+<div id="message"></div>
+
+<script>
+  // Initial money
+  let money = 1000;
+  const moneyDisplay = document.getElementById('money');
+  const betInput = document.getElementById('betAmount');
+  const betButton = document.getElementById('betButton');
+  const road = document.getElementById('road');
+  const message = document.getElementById('message');
+
+  // Number of chickens
+  const NUM_CHICKENS = 3;
+  // Animation duration (ms)
+  const CROSS_TIME = 4000;
+
+  let chickens = [];
+
+  function updateMoneyDisplay() {
+    moneyDisplay.textContent = `Money: $${money.toFixed(2)}`;
+  }
+
+  // Create chicken elements
+  function createChickens() {
+    chickens.forEach(c => road.removeChild(c.elem));
+    chickens = [];
+    for(let i=0; i<NUM_CHICKENS; i++) {
+      let c = document.createElement('div');
+      c.classList.add('chicken');
+      c.style.top = (40 + i*60) + 'px';
+      c.style.left = '0px';
+      road.appendChild(c);
+      chickens.push({elem: c, alive: true});
+    }
+  }
+
+  // Animate chickens crossing
+  function animateCrossing(results) {
+    return new Promise(resolve => {
+      const start = performance.now();
+
+      function step(timestamp) {
+        let progress = (timestamp - start) / CROSS_TIME;
+        if (progress > 1) progress = 1;
+
+        chickens.forEach((chicken, i) => {
+          if (results[i]) {
+            // Alive - move fully across
+            chicken.elem.style.left = (progress * (road.clientWidth - 40)) + 'px';
+            chicken.elem.classList.remove('dead');
+          } else {
+            // Dead - move halfway then "fall"
+            if (progress < 0.5) {
+              chicken.elem.style.left = (progress * 2 * (road.clientWidth / 2 - 40)) + 'px';
+            } else {
+              // Fall (rotate + gray out)
+              chicken.elem.style.left = (road.clientWidth/2 - 40) + 'px';
+              chicken.elem.classList.add('dead');
+              chicken.elem.style.transform = `rotate(${(progress - 0.5)*180}deg)`;
+            }
+          }
+        });
+
+        if (progress < 1) {
+          requestAnimationFrame(step);
+        } else {
+          resolve();
+        }
+      }
+
+      requestAnimationFrame(step);
+    });
+  }
+
+  function getRandomResults() {
+    // Randomly determine if chicken survives crossing
+    // Let's say 70% chance to survive
+    return chickens.map(() => Math.random() < 0.7);
+  }
+
+  function calculatePayout(bet, results) {
+    const survivedCount = results.filter(x => x).length;
+    // Payout: number of survivors * bet (1:1)
+    return bet * survivedCount;
+  }
+
+  betButton.addEventListener('click', async () => {
+    let bet = parseFloat(betInput.value);
+    if (isNaN(bet) || bet <= 0) {
+      alert('Enter a valid bet amount greater than 0');
+      return;
+    }
+    if (bet > money) {
+      alert('You do not have enough money to bet that amount.');
+      return;
+    }
+
+    // Disable UI during round
+    betButton.disabled = true;
+    betInput.disabled = true;
+    message.textContent = 'Chickens are crossing...';
+
+    // Create chickens
+    createChickens();
+
+    // Deduct bet first
+    money -= bet;
+    updateMoneyDisplay();
+
+    // Determine crossing results
+    const results = getRandomResults();
+
+    // Animate crossing
+    await animateCrossing(results);
+
+    // Calculate payout
+    const payout = calculatePayout(bet, results);
+    money += payout;
+    updateMoneyDisplay();
+
+    // Show result message
+    if (payout > 0) {
+      message.textContent = `You won $${payout.toFixed(2)}! Chickens survived: ${results.filter(x => x).length}`;
+    } else {
+      message.textContent = `You lost $${bet.toFixed(2)}. All chickens got hit!`;
+    }
+
+    // Re-enable UI if still has money
+    if (money < 1) {
+      message.textContent += ' You ran out of money! Game over.';
+      betButton.disabled = true;
+      betInput.disabled = true;
+    } else {
+      betButton.disabled = false;
+      betInput.disabled = false;
+    }
+  });
+
+  // Initialize display
+  updateMoneyDisplay();
+</script>
+
+</body>
+</html>
